@@ -4,7 +4,8 @@ import { spawn } from "child_process";
 
 const app = express();
 app.use(cors());
-const PORT = 3000;
+
+const PORT = process.env.PORT || 3000;
 
 app.get("/", (req, res) => res.send("🎧 BITM Stream Server Running"));
 
@@ -14,14 +15,13 @@ app.get("/stream", async (req, res) => {
 
   console.log(`🎬 Streaming YouTube ID: ${id}`);
 
-  // ✅ Prepare yt-dlp first (prefetch manifest)
+  // 1️⃣ Get direct audio link from yt-dlp
   const ytdlp = spawn("yt-dlp", [
     "-f", "bestaudio",
     "--no-playlist",
     "--no-warnings",
     "--quiet",
-    "--socket-timeout", "30",
-    "-g", // get direct URL
+    "-g",
     `https://www.youtube.com/watch?v=${id}`,
   ]);
 
@@ -32,7 +32,6 @@ app.get("/stream", async (req, res) => {
   }
 
   directUrl = directUrl.trim();
-
   if (!directUrl) {
     console.error("❌ Failed to fetch direct URL");
     return res.status(500).send("Failed to get stream URL");
@@ -40,13 +39,13 @@ app.get("/stream", async (req, res) => {
 
   console.log("🎯 Direct audio URL:", directUrl);
 
-  // ✅ Now stream directly from YouTube using ffmpeg (so it’s a valid audio stream)
+  // 2️⃣ Use ffmpeg to stream to the client
   const ffmpeg = spawn("ffmpeg", [
     "-i", directUrl,
     "-f", "mp3",
     "-vn",
     "-acodec", "libmp3lame",
-    "-b:a", "192k",
+    "-b:a", "128k",
     "-content_type", "audio/mpeg",
     "pipe:1",
   ]);
@@ -59,13 +58,8 @@ app.get("/stream", async (req, res) => {
 
   ffmpeg.stdout.pipe(res);
 
-  ffmpeg.stderr.on("data", (data) => {
-    // Comment this out if it floods your terminal
-    // console.log("ffmpeg:", data.toString());
-  });
-
-  ffmpeg.on("close", (code) => {
-    console.log(`✅ Stream ended (code ${code})`);
+  ffmpeg.on("close", () => {
+    console.log(`✅ Stream ended for ${id}`);
     res.end();
   });
 
@@ -76,5 +70,5 @@ app.get("/stream", async (req, res) => {
 });
 
 app.listen(PORT, () =>
-  console.log(`🚀 Server running at http://localhost:${PORT}`)
+  console.log(`🚀 Server running on port ${PORT}`)
 );
